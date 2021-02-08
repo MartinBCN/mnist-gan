@@ -19,7 +19,7 @@ def get_data(batch_size: int = 4):
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Lambda(lambda x: (2*x) - 1),
-        transforms.Lambda(lambda x: x.reshape(1, 28*28))
+        transforms.Lambda(lambda x: x.reshape(28*28))
         ])
 
     dataset1 = datasets.MNIST('../data', train=True, download=True, transform=transform)
@@ -35,6 +35,7 @@ if __name__ == '__main__':
 
     for i, (data, target) in enumerate(train):
         print(data.shape)
+        print(target.shape)
         for j in range(4):
             print(torch.min(data[j]))
             print(torch.max(data[j]))

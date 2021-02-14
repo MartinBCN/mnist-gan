@@ -1,8 +1,9 @@
 import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+import os
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if (torch.cuda.is_available() and os.environ.get('USE_GPU')) else "cpu")
 
 
 def get_data(batch_size: int = 4):

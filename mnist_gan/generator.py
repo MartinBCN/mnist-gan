@@ -29,9 +29,9 @@ class Generator(nn.Module):
         """
 
     def forward(self, x):
-        x = F.relu(self.dense1(x))
-        x = F.relu(self.dense2(x))
-        x = F.relu(self.dense3(x))
+        x = F.leaky_relu(self.dense1(x), negative_slope=0.2)
+        x = F.leaky_relu(self.dense2(x), negative_slope=0.2)
+        x = F.leaky_relu(self.dense3(x), negative_slope=0.2)
         x = torch.tanh(self.dense4(x))
         return x
 

@@ -27,7 +27,7 @@ class MnistGan(object):
         self.bookkeeping = {'loss': {'discriminator': [], 'generator': []},
                             'accuracy': {'discriminator': [], 'generator': []}}
 
-        self.visualisation_batch = torch.rand(self.batch_size, self.latent_dimension)
+        self.visualisation_batch = torch.rand(5, self.latent_dimension)
 
     def fake_batch(self, target: Tensor, optimizer: Optimizer):
         noise = torch.rand(self.batch_size, self.latent_dimension)
@@ -51,9 +51,10 @@ class MnistGan(object):
         images = 0.5 * images + 0.5
         images = images.detach().numpy()
 
-        fig, axs = plt.subplots(1, self.batch_size)
+        cols = images.shape[0]
+        fig, axs = plt.subplots(1, cols)
         idx = 0
-        for i in range(self.batch_size):
+        for i in range(cols):
             axs[i].imshow(images[idx].reshape(28, 28), cmap='gray')
             axs[i].axis('off')
             idx += 1
@@ -61,12 +62,16 @@ class MnistGan(object):
         plt.close()
 
         fig, axs = plt.subplots(2, 2)
-        axs[0, 0].plot(self.bookkeeping['discriminator']['loss'], label='Discriminator Loss')
-        axs[0, 1].plot(self.bookkeeping['discriminator']['accuracy'], label='Discriminator Accuracy')
-        axs[1, 0].plot(self.bookkeeping['generator']['loss'], label='Generator Loss')
-        axs[1, 1].plot(self.bookkeeping['generator']['accuracy'], label='Generator Accuracy')
+        axs[0, 0].plot(self.bookkeeping['loss']['discriminator'], label='Discriminator Loss')
+        axs[0, 0].legend()
+        axs[0, 1].plot(self.bookkeeping['accuracy']['discriminator'], label='Discriminator Accuracy')
+        axs[0, 1].legend()
+        axs[1, 0].plot(self.bookkeeping['loss']['generator'], label='Generator Loss')
+        axs[1, 0].legend()
+        axs[1, 1].plot(self.bookkeeping['accuracy']['generator'], label='Generator Accuracy')
+        axs[1, 1].legend()
 
-        fig.savefig(f"{fig_dir}/losses_{epoch}.png")
+        fig.savefig(f"{fig_dir}/losses.png")
         plt.close()
 
     def train(self, data: DataLoader, epochs: int = 10):
@@ -87,6 +92,7 @@ class MnistGan(object):
             epoch_accuracy_generator = []
 
             # --- Train Discriminator ---
+
             self.discriminator.train()
             self.generator.eval()
             disc_optimizer.zero_grad()

@@ -1,45 +1,44 @@
-import torch
-from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
 import os
+from pathlib import Path
 
-device = torch.device("cuda" if (torch.cuda.is_available() and os.environ.get('USE_GPU')) else "cpu")
+from torch.utils.data import DataLoader
+from torchvision import transforms, datasets
 
 
-def get_data(batch_size: int = 4):
-    """
-
-    Parameters
-    ----------
-    batch_size
-
-    Returns
-    -------
-
-    """
+def get_data(batch_size: int = 10):
     transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Lambda(lambda x: (2*x) - 1),
-        transforms.Lambda(lambda x: x.reshape(28*28))
-        ])
+                                    transforms.ToTensor(),
+                                    transforms.Normalize((0.5,),(0.5,)),
+    ])
+    # to_pil_image = transforms.ToPILImage()
 
-    dataset1 = datasets.MNIST('../data', train=True, download=True, transform=transform)
-    dataset2 = datasets.MNIST('../data', train=False, transform=transform)
-    train_loader = DataLoader(dataset1, batch_size=batch_size)
-    test_loader = DataLoader(dataset2, batch_size=batch_size)
+    data_dir = os.environ.get('DATADIR', Path(__file__).parents[1] / 'data')
+
+    train_data = datasets.MNIST(
+        root=data_dir,
+        train=True,
+        download=True,
+        transform=transform
+    )
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+
+    test_data = datasets.MNIST(
+        root=data_dir,
+        train=False,
+        download=True,
+        transform=transform
+    )
+    test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=True)
 
     return train_loader, test_loader
 
 
-if __name__ == '__main__':
-    train, test = get_data(4)
+if __name__ == "__main__":
+    train, test = get_data(10)
 
-    for i, (data, target) in enumerate(train):
-        print(data.shape)
-        print(target.shape)
-        for j in range(4):
-            print(torch.min(data[j]))
-            print(torch.max(data[j]))
+    print(len(train), len(test))
 
-        if i == 0:
-            break
+    for (batch, labels) in train:
+        print(batch.shape)
+        print(labels.shape)
+        break

@@ -1,51 +1,87 @@
 import os
-
-import numpy as np
 import torch
 from sklearn import metrics
-from torch import optim, Tensor
-from torch.optim import Optimizer
+from torch import optim, nn, Tensor
 from torch.utils.data import DataLoader
-import torch.nn as nn
 import matplotlib.pyplot as plt
-
 from mnist_gan.discriminator import Discriminator
 from mnist_gan.generator import Generator
 
-device = torch.device("cuda" if (torch.cuda.is_available() and os.environ.get('USE_GPU')) else "cpu")
+DEVICE = torch.device("cuda" if (torch.cuda.is_available() and os.environ.get('USE_GPU')) else "cpu")
 
 
-class MnistGan(object):
+class GAN:
 
-    def __init__(self, batch_size: int = 4,
-                 latent_dimension: int = 100):
-        self.batch_size = batch_size
-        self.discriminator = Discriminator()
-        self.generator = Generator(latent_dimension=latent_dimension)
-        self.criterion = nn.BCELoss()
+    def __init__(self, latent_dimension: int = 100):
+
         self.latent_dimension = latent_dimension
-        self.bookkeeping = {'loss': {'discriminator': [], 'generator': []},
-                            'accuracy': {'discriminator': [], 'generator': []}}
+        self.generator = Generator(latent_dimension).to(DEVICE)
+        self.discriminator = Discriminator().to(DEVICE)
 
-        self.visualisation_batch = torch.rand(5, self.latent_dimension)
+        # This is fixed, we want to see how this improves
+        self.visualisation_noise = self.create_noise(5, latent_dimension)
 
-    def fake_batch(self, target: Tensor, optimizer: Optimizer):
-        noise = torch.rand(self.batch_size, self.latent_dimension)
-        fake_images = self.generator(noise)
+        # optimizers
+        self.optimiser_generator = optim.Adam(self.generator.parameters(), lr=0.0002)
+        self.optimiser_discriminator = optim.Adam(self.discriminator.parameters(), lr=0.0002)
 
-        outputs = self.discriminator(fake_images)
-        accuracy_fake = metrics.accuracy_score(target, outputs > 0.5)
-        loss_fake = self.criterion(outputs, target)
-        loss_fake.backward()
-        optimizer.step()
+        # loss function
+        self.criterion = nn.BCELoss()
 
-        return loss_fake, accuracy_fake
+        self.losses = {'discriminator': [], 'generator': []}
+        self.accuracies = {'discriminator': [], 'generator': []}
+
+    @staticmethod
+    def create_noise(sample_size, nz):
+        """
+        Function to create the noise vector
+
+        Parameters
+        ----------
+        sample_size
+        nz
+
+        Returns
+        -------
+
+        """
+        return torch.randn(sample_size, nz).to(DEVICE)
+
+    @staticmethod
+    def label_real(size):
+        """
+        to create real labels (1s)
+
+        Parameters
+        ----------
+        size
+
+        Returns
+        -------
+
+        """
+
+        data = torch.ones(size, 1)
+        return data.to(DEVICE)
+
+    @staticmethod
+    def label_fake(size):
+        """
+        to create fake labels (0s)
+
+        Returns
+        -------
+
+        """
+        data = torch.zeros(size, 1)
+        return data.to(DEVICE)
 
     def visualise(self, epoch: int):
 
         #
         fig_dir = os.environ.get('FIG_DIR', 'figures')
-        images = self.generator(self.visualisation_batch)
+        self.generator.eval()
+        images = self.generator(self.visualisation_noise)
 
         # Rescale images 0 - 1
         images = 0.5 * images + 0.5
@@ -61,78 +97,94 @@ class MnistGan(object):
         fig.savefig(f"{fig_dir}/gan_images_{epoch}.png")
         plt.close()
 
-        fig, axs = plt.subplots(2, 2)
-        axs[0, 0].plot(self.bookkeeping['loss']['discriminator'], label='Discriminator Loss')
-        axs[0, 0].legend()
-        axs[0, 1].plot(self.bookkeeping['accuracy']['discriminator'], label='Discriminator Accuracy')
-        axs[0, 1].legend()
-        axs[1, 0].plot(self.bookkeeping['loss']['generator'], label='Generator Loss')
-        axs[1, 0].legend()
-        axs[1, 1].plot(self.bookkeeping['accuracy']['generator'], label='Generator Accuracy')
-        axs[1, 1].legend()
+        fig, axs = plt.subplots(2)
+        axs[0].plot(self.losses['discriminator'], label='Discriminator')
+        axs[0].plot(self.losses['generator'], label='Generator')
+        axs[0].legend(title='Loss')
+        axs[1].plot(self.accuracies['discriminator'], label='Discriminator')
+        axs[1].plot(self.accuracies['generator'], label='Generator')
+        axs[1].legend(title='Accuracy')
 
         fig.savefig(f"{fig_dir}/losses.png")
         plt.close()
 
-    def train(self, data: DataLoader, epochs: int = 10):
-        disc_optimizer = optim.Adam(self.discriminator.parameters(), lr=0.0002)
-        gen_optimizer = optim.Adam(self.generator.parameters(), lr=0.0002)
+    def train_discriminator(self, data_real: Tensor, data_fake: Tensor) -> (float, float):
 
-        ones = torch.ones(self.batch_size, 1)
-        zeros = torch.ones(self.batch_size, 1)
-        n_batch = len(data)
+        batch_size = data_real.size(0)
+        real_label = self.label_real(batch_size)
+        fake_label = self.label_fake(batch_size)
+
+        self.optimiser_discriminator.zero_grad()
+        output_real = self.discriminator(data_real)
+        loss_real = self.criterion(output_real, real_label)
+        accuracy_real = metrics.accuracy_score(real_label, output_real > 0.5)
+
+        output_fake = self.discriminator(data_fake)
+        loss_fake = self.criterion(output_fake, fake_label)
+        accuracy_fake = metrics.accuracy_score(fake_label, output_fake > 0.5)
+
+        loss_real.backward()
+        loss_fake.backward()
+        self.optimiser_discriminator.step()
+
+        return loss_real + loss_fake, (accuracy_real + accuracy_fake) / 2
+
+    # function to train the generator network
+    def train_generator(self, data_fake: Tensor):
+
+        b_size = data_fake.size(0)
+
+        real_label = self.label_real(b_size)
+        self.optimiser_generator.zero_grad()
+        output = self.discriminator(data_fake)
+
+        accuracy = metrics.accuracy_score(real_label, output > 0.5)
+        loss = self.criterion(output, real_label)
+        loss.backward()
+        self.optimiser_generator.step()
+
+        return loss, accuracy
+
+    def train(self, train_loader: DataLoader, epochs: int = 10):
 
         for epoch in range(epochs):
 
-            print(f'=== Epoch {epoch} / {epochs}')
-
-            epoch_loss_discriminator = 0
-            epoch_accuracy_discriminator = []
-            epoch_loss_generator = 0
-            epoch_accuracy_generator = []
-
-            # --- Train Discriminator ---
-
-            self.discriminator.train()
-            self.generator.eval()
-            disc_optimizer.zero_grad()
-
-            for i, (real_images, _) in enumerate(data):
-
-                if (i % 50) == 0:
-                    print(f'Train Discriminator Batch {i}/{n_batch}')
-
-                # --- Real Images ---
-                real_images = real_images.to(device)
-                outputs = self.discriminator(real_images)
-                accuracy_real = metrics.accuracy_score(ones, outputs > 0.5)
-                loss_real = self.criterion(outputs, ones)
-                loss_real.backward()
-                disc_optimizer.step()
-
-                # --- Fake Images ---
-                loss_fake, accuracy_fake = self.fake_batch(target=zeros, optimizer=disc_optimizer)
-                epoch_loss_discriminator += (loss_fake + loss_real) / 2
-                epoch_accuracy_discriminator.append((accuracy_fake + accuracy_real) / 2)
-
-            self.bookkeeping['loss']['discriminator'].append(epoch_loss_discriminator)
-            self.bookkeeping['accuracy']['discriminator'].append(np.mean(epoch_accuracy_discriminator))
-
-            # --- Train Generator ---
+            #
             self.generator.train()
-            self.discriminator.eval()
-            gen_optimizer.zero_grad()
+            self.discriminator.train()
 
-            for i in range(2 * n_batch):
+            loss_g = 0.0
+            loss_d = 0.0
+            accuracy_generator = 0
+            accuracy_discriminator = 0
 
-                if (i % 50) == 0:
-                    print(f'Train Generator Batch {i}/{2 * n_batch}')
+            for bi, data in enumerate(train_loader):
+                image, _ = data
+                image = image.to(DEVICE)
+                b_size = len(image)
 
-                loss, accuracy = self.fake_batch(target=ones, optimizer=gen_optimizer)
-                epoch_loss_generator += loss
-                epoch_accuracy_generator.append(accuracy)
+                data_fake = self.generator(self.create_noise(b_size, self.latent_dimension)).detach()
+                data_real = image
+                # train the discriminator network
+                loss_batch, acc_batch = self.train_discriminator(data_real, data_fake)
+                loss_d += loss_batch
+                accuracy_discriminator += acc_batch
 
-            self.bookkeeping['loss']['generator'].append(epoch_loss_generator)
-            self.bookkeeping['accuracy']['generator'].append(np.mean(epoch_accuracy_generator))
+                # train the generator network
+                data_fake = self.generator(self.create_noise(b_size, self.latent_dimension))
+                loss_batch, acc_batch = self.train_generator(data_fake)
+                loss_g += loss_batch
+                accuracy_generator += acc_batch
+
+            epoch_loss_g = loss_g / len(train_loader)  # total generator loss for the epoch
+            epoch_loss_d = loss_d / len(train_loader)  # total discriminator loss for the epoch
+            self.losses['generator'].append(epoch_loss_g)
+            self.losses['discriminator'].append(epoch_loss_d)
+
+            self.accuracies['generator'].append(accuracy_generator / len(train_loader))
+            self.accuracies['discriminator'].append(accuracy_discriminator / len(train_loader))
+
+            print(f"Epoch {epoch} of {epochs}")
+            print(f"Generator loss: {epoch_loss_g:.8f}, Discriminator loss: {epoch_loss_d:.8f}")
 
             self.visualise(epoch)

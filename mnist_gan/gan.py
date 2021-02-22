@@ -1,4 +1,7 @@
 import os
+from pathlib import Path
+from typing import Union
+
 import torch
 from sklearn import metrics
 from torch import optim, nn, Tensor
@@ -188,3 +191,8 @@ class GAN:
             print(f"Generator loss: {epoch_loss_g:.8f}, Discriminator loss: {epoch_loss_d:.8f}")
 
             self.visualise(epoch)
+
+    def save_generator(self, fn: Union[str, Path]):
+        fn = Path(fn)
+        fn.parents[0].mkdir(parents=True, exist_ok=True)
+        torch.save(self.generator.state_dict(), fn)

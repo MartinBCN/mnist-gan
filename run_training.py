@@ -6,8 +6,8 @@ from mnist_gan.data import get_data
 # learning parameters
 from mnist_gan.gan import GAN
 
-batch_size = 512
-train, test = get_data(64)
+batch_size = 64
+train, test = get_data('data', batch_size)
 
 gan = GAN(latent_dimension=128)
 

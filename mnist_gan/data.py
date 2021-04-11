@@ -1,18 +1,33 @@
 import os
 from pathlib import Path
+from typing import Union, Tuple
 
 from torch.utils.data import DataLoader
 from torchvision import transforms, datasets
 
 
-def get_data(batch_size: int = 10):
+def get_data(data_dir: Union[Path, str], batch_size: int = 10) -> Tuple[DataLoader, DataLoader]:
+    """
+    Wrapper for the built-in MNIST dataset in TorchVision
+
+    Parameters
+    ----------
+    data_dir: Union[Path, str]
+        Base data directory, mnist data set will be downloaded here if necessary
+    batch_size: int, default = 10
+        Batch size should be chosen depending on available memory
+
+    Returns
+    -------
+    train_loader: DataLoader
+        PyTorch DataLoader with MNIST dataset and transforms (Tensor, Normalize)
+    test_loader: DataLoader
+        PyTorch DataLoader with MNIST dataset and transforms (Tensor, Normalize)
+    """
     transform = transforms.Compose([
                                     transforms.ToTensor(),
-                                    transforms.Normalize((0.5,),(0.5,)),
+                                    transforms.Normalize((0.5,), (0.5,)),
     ])
-    # to_pil_image = transforms.ToPILImage()
-
-    data_dir = os.environ.get('DATADIR', Path(__file__).parents[1] / 'data')
 
     train_data = datasets.MNIST(
         root=data_dir,
@@ -34,7 +49,8 @@ def get_data(batch_size: int = 10):
 
 
 if __name__ == "__main__":
-    train, test = get_data(10)
+    data_directory = os.environ.get('DATA_DIR', Path(__file__).parents[1] / 'data')
+    train, test = get_data(data_directory, 10)
 
     print(len(train), len(test))
 
